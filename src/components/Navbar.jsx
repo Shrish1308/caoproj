@@ -18,7 +18,7 @@ export default function Navbar() {
     return (
         <nav className="navbar">
             <div className="navbar-inner">
-                <Link to="/" className="navbar-logo">
+                <Link to="/" className="navbar-logo" onClick={() => setMobileOpen(false)}>
                     <div className="logo-icon">
                         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                             <rect x="2" y="2" width="28" height="28" rx="6" stroke="url(#logoGrad)" strokeWidth="2" />
@@ -43,6 +43,7 @@ export default function Navbar() {
                             key={link.path}
                             to={link.path}
                             className={`nav-link ${location.pathname === link.path ? 'active' : ''}`}
+                            onClick={() => setMobileOpen(false)}
                         >
                             <span className="nav-icon">{link.icon}</span>
                             {link.label}
@@ -61,6 +62,8 @@ export default function Navbar() {
                     className={`hamburger ${mobileOpen ? 'open' : ''}`}
                     onClick={() => setMobileOpen(!mobileOpen)}
                     aria-label="Toggle menu"
+                    aria-expanded={mobileOpen}
+                    aria-controls="mobile-menu"
                 >
                     <span></span>
                     <span></span>
@@ -71,6 +74,7 @@ export default function Navbar() {
             <AnimatePresence>
                 {mobileOpen && (
                     <motion.div
+                        id="mobile-menu"
                         className="mobile-menu"
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}

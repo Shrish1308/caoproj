@@ -92,8 +92,10 @@ function detectDataHazards(pipelineState, currentCycle) {
             subtype: 'RAW',
             cycle: currentCycle,
             source: otherEntry.instruction.raw,
+            sourceIndex: otherEntry.instrIndex,
             sourceStage: otherEntry.stage,
             dependent: idEntry.instruction.raw,
+            dependentIndex: idEntry.instrIndex,
             register: `R${wr}`,
             description: `RAW hazard: "${idEntry.instruction.raw}" reads R${wr} which "${otherEntry.instruction.raw}" hasn't written back yet`,
           });
@@ -153,7 +155,6 @@ export function runPipelineSimulation(assemblyText, enableForwarding = false) {
   let cycle = 0;
   const maxCycles = 200;     // Safety limit
   let halted = false;
-  let fetchBlocked = false;
 
   while (cycle < maxCycles) {
     cycle++;
@@ -186,7 +187,7 @@ export function runPipelineSimulation(assemblyText, enableForwarding = false) {
 
       // Revert the ID instruction back (it was just moved to EX)
       const exEntry = pipeline.find(e =>
-        e.stage === 'EX' && dataHazards.some(h => h.dependent === e.instruction.raw)
+        e.stage === 'EX' && dataHazards.some(h => h.dependentIndex === e.instrIndex)
       );
       if (exEntry) {
         exEntry.stage = 'ID'; // Push back to ID
@@ -195,14 +196,14 @@ export function runPipelineSimulation(assemblyText, enableForwarding = false) {
     } else if (dataHazards.length > 0 && enableForwarding) {
       // With forwarding, only LOAD-use hazards cause stalls
       const loadUseHazards = dataHazards.filter(h => {
-        const srcInstr = pipeline.find(e => e.instruction.raw === h.source);
+        const srcInstr = pipeline.find(e => e.instrIndex === h.sourceIndex);
         return srcInstr && srcInstr.instruction.name === 'LOAD' && h.sourceStage === 'EX';
       });
       if (loadUseHazards.length > 0) {
         stallThisCycle = true;
         totalStalls++;
         const exEntry = pipeline.find(e =>
-          e.stage === 'EX' && loadUseHazards.some(h => h.dependent === e.instruction.raw)
+          e.stage === 'EX' && loadUseHazards.some(h => h.dependentIndex === e.instrIndex)
         );
         if (exEntry) {
           exEntry.stage = 'ID';
@@ -222,7 +223,7 @@ export function runPipelineSimulation(assemblyText, enableForwarding = false) {
     allHazards.push(...dataHazards, ...controlHazards);
 
     // ---- Fetch new instruction ----
-    if (!stallThisCycle && !halted && !fetchBlocked && nextInstrIndex < validInstructions.length) {
+    if (!stallThisCycle && !halted && nextInstrIndex < validInstructions.length) {
       const instr = validInstructions[nextInstrIndex];
       pipeline.push({
         instruction: instr,

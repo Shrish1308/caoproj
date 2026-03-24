@@ -55,7 +55,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-xs);
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-md) calc(var(--space-sm) + 6px);
     border-radius: var(--radius-md);
     font-size: 0.9rem;
     font-weight: 500;
@@ -75,10 +75,9 @@
 
 .nav-indicator {
     position: absolute;
-    bottom: -1px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 60%;
+    left: var(--space-md);
+    right: var(--space-md);
+    bottom: 3px;
     height: 2px;
     background: var(--gradient-blue-purple);
     border-radius: var(--radius-full);

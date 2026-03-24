@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import { runPipelineSimulation, buildPipelineGrid, PIPELINE_STAGES, STAGE_COLORS, PIPELINE_SAMPLE_PROGRAMS } from '../simulation/pipeline';
+import { motion } from 'framer-motion';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { runPipelineSimulation, buildPipelineGrid, PIPELINE_STAGES, PIPELINE_SAMPLE_PROGRAMS } from '../simulation/pipeline';
 import './PipelineSimulator.css';
 
 const SPEED_OPTIONS = [
@@ -9,22 +9,6 @@ const SPEED_OPTIONS = [
     { label: 'Normal', ms: 600 },
     { label: 'Fast', ms: 200 },
 ];
-
-const stageColorMap = {
-    IF: 'var(--accent-blue)',
-    ID: 'var(--accent-purple)',
-    EX: 'var(--accent-emerald)',
-    MEM: 'var(--accent-orange)',
-    WB: 'var(--accent-pink)',
-};
-
-const stageBgMap = {
-    IF: 'var(--accent-blue-dim)',
-    ID: 'var(--accent-purple-dim)',
-    EX: 'var(--accent-emerald-dim)',
-    MEM: 'var(--accent-orange-dim)',
-    WB: 'var(--accent-pink-dim)',
-};
 
 export default function PipelineSimulator() {
     const [code, setCode] = useState(Object.values(PIPELINE_SAMPLE_PROGRAMS)[0]);
@@ -34,24 +18,9 @@ export default function PipelineSimulator() {
     const [speedIdx, setSpeedIdx] = useState(1);
     const [forwarding, setForwarding] = useState(false);
     const [hasRun, setHasRun] = useState(false);
+    const [runError, setRunError] = useState('');
     const intervalRef = useRef(null);
     const gridRef = useRef(null);
-
-    // Run simulation
-    const handleRun = useCallback(() => {
-        stopPlayback();
-        const result = runPipelineSimulation(code, forwarding);
-        setSimResult(result);
-        setCurrentCycle(0);
-        setHasRun(true);
-    }, [code, forwarding]);
-
-    const handleReset = useCallback(() => {
-        stopPlayback();
-        setSimResult(null);
-        setCurrentCycle(0);
-        setHasRun(false);
-    }, []);
 
     const stopPlayback = useCallback(() => {
         setIsPlaying(false);
@@ -60,6 +29,29 @@ export default function PipelineSimulator() {
             intervalRef.current = null;
         }
     }, []);
+
+    // Run simulation
+    const handleRun = useCallback(() => {
+        stopPlayback();
+        const result = runPipelineSimulation(code, forwarding);
+        setSimResult(result);
+        setCurrentCycle(0);
+        if (result.instructions.length === 0) {
+            setRunError('No valid instructions found. Please check syntax or load a sample program.');
+            setHasRun(false);
+            return;
+        }
+        setRunError('');
+        setHasRun(true);
+    }, [code, forwarding, stopPlayback]);
+
+    const handleReset = useCallback(() => {
+        stopPlayback();
+        setSimResult(null);
+        setCurrentCycle(0);
+        setHasRun(false);
+        setRunError('');
+    }, [stopPlayback]);
 
     const handleStep = useCallback(() => {
         if (!simResult) return;
@@ -79,6 +71,9 @@ export default function PipelineSimulator() {
     // Auto-advance when playing
     useEffect(() => {
         if (isPlaying && simResult) {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
             intervalRef.current = setInterval(() => {
                 setCurrentCycle(prev => {
                     if (prev >= simResult.timeline.length - 1) {
@@ -90,7 +85,10 @@ export default function PipelineSimulator() {
             }, SPEED_OPTIONS[speedIdx].ms);
         }
         return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
         };
     }, [isPlaying, speedIdx, simResult, stopPlayback]);
 
@@ -115,11 +113,6 @@ export default function PipelineSimulator() {
     // Build pipeline grid data
     const gridData = simResult ? buildPipelineGrid(simResult.timeline, simResult.instructions) : null;
 
-    // Get current cycle hazards
-    const currentHazards = simResult && simResult.timeline[currentCycle]
-        ? simResult.timeline[currentCycle].hazards
-        : [];
-
     // Performance comparison chart data
     const perfData = simResult ? [
         {
@@ -131,13 +124,6 @@ export default function PipelineSimulator() {
             name: 'CPI',
             Sequential: PIPELINE_STAGES.length,
             Pipelined: simResult.metrics.cpi,
-        },
-    ] : [];
-
-    const speedupData = simResult ? [
-        {
-            name: 'Speedup',
-            value: simResult.metrics.speedup,
         },
     ] : [];
 
@@ -175,7 +161,10 @@ export default function PipelineSimulator() {
                     <textarea
                         className="code-editor"
                         value={code}
-                        onChange={e => setCode(e.target.value)}
+                        onChange={e => {
+                            setCode(e.target.value);
+                            setRunError('');
+                        }}
                         spellCheck={false}
                         placeholder="Enter assembly instructions..."
                     />
@@ -197,6 +186,7 @@ export default function PipelineSimulator() {
                             🚀 Run Pipeline
                         </button>
                     </div>
+                    {runError && <p className="run-error">{runError}</p>}
 
                     {/* Stage Legend */}
                     <div className="stage-legend">

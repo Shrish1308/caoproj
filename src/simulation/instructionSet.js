@@ -103,11 +103,59 @@ export const INSTRUCTIONS = {
  * Parse a register reference like "R0" to its index
  */
 function parseRegister(token) {
+  if (typeof token !== 'string') return null;
   const match = token.match(/^R(\d)$/i);
   if (!match) return null;
-  const idx = parseInt(match[1]);
+  const idx = parseInt(match[1], 10);
   if (idx < 0 || idx > 7) return null;
   return idx;
+}
+
+function parseInteger(token) {
+  if (typeof token !== 'string') return null;
+  const trimmed = token.trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  return parseInt(trimmed, 10);
+}
+
+function parseMemoryAddress(token) {
+  const match = token?.match(/^\[(.+)\]$/);
+  if (!match) {
+    return { error: `Invalid memory address "${token}". Expected format [addr].` };
+  }
+  const addr = parseInteger(match[1]);
+  if (addr === null) {
+    return { error: `Invalid memory address "${token}". Address must be an integer.` };
+  }
+  if (addr < 0 || addr > 255) {
+    return { error: `Memory address "${addr}" out of range. Valid range is 0-255.` };
+  }
+  return { value: addr };
+}
+
+function parseImmediate(token) {
+  if (!token || !token.startsWith('#')) {
+    return { error: `Invalid immediate "${token}". Expected format #value.` };
+  }
+  const value = parseInteger(token.slice(1));
+  if (value === null) {
+    return { error: `Invalid immediate "${token}". Value must be an integer.` };
+  }
+  return { value };
+}
+
+function parseJumpTarget(token, labels, instructionCount) {
+  if (labels[token] !== undefined) {
+    return { value: labels[token] };
+  }
+  const addr = parseInteger(token);
+  if (addr === null) {
+    return { error: `Invalid jump target "${token}". Use a label or integer address.` };
+  }
+  if (addr < 0 || addr >= instructionCount) {
+    return { error: `Jump target "${addr}" out of range. Valid range is 0-${Math.max(instructionCount - 1, 0)}.` };
+  }
+  return { value: addr };
 }
 
 /**
@@ -121,56 +169,128 @@ export function parseProgram(text) {
   // First pass: collect labels
   let instrIndex = 0;
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('//')) continue;
-    const labelMatch = trimmed.match(/^(\w+):$/);
-    if (labelMatch) {
-      labels[labelMatch[1]] = instrIndex;
+    const code = line.split(';')[0].split('//')[0].trim();
+    if (!code) continue;
+
+    const labelOnlyMatch = code.match(/^(\w+):$/);
+    if (labelOnlyMatch) {
+      labels[labelOnlyMatch[1]] = instrIndex;
       continue;
     }
-    instrIndex++;
+
+    const labelInlineMatch = code.match(/^(\w+):\s*(.+)$/);
+    if (labelInlineMatch) {
+      labels[labelInlineMatch[1]] = instrIndex;
+      if (labelInlineMatch[2].trim()) instrIndex++;
+      continue;
+    }
+
+    instrIndex += 1;
   }
 
   // Second pass: parse instructions
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('//') || trimmed.match(/^\w+:$/)) continue;
 
     // Remove inline comments
     const code = trimmed.split(';')[0].split('//')[0].trim();
-    const parts = code.split(/[\s,]+/).filter(Boolean);
+    if (!code) continue;
+
+    let instructionCode = code;
+    const labelOnlyMatch = code.match(/^(\w+):$/);
+    if (labelOnlyMatch) continue;
+
+    const labelInlineMatch = code.match(/^(\w+):\s*(.+)$/);
+    if (labelInlineMatch) {
+      instructionCode = labelInlineMatch[2].trim();
+      if (!instructionCode) continue;
+    }
+
+    const raw = instructionCode;
+    const pushError = (message) => {
+      instructions.push({
+        error: true,
+        raw,
+        message: `Line ${lineIndex + 1}: ${message}`,
+      });
+    };
+
+    const parts = instructionCode.split(/[\s,]+/).filter(Boolean);
+    if (parts.length === 0) continue;
     const mnemonic = parts[0].toUpperCase();
 
     const instrDef = INSTRUCTIONS[mnemonic];
     if (!instrDef) {
-      instructions.push({ error: true, raw: trimmed, message: `Unknown instruction: ${mnemonic}` });
+      pushError(`Unknown instruction "${mnemonic}".`);
       continue;
     }
 
-    const instr = { ...instrDef, raw: trimmed, operands: [] };
+    const instr = { ...instrDef, raw, operands: [] };
 
     switch (mnemonic) {
-      case 'HALT':
+      case 'HALT': {
+        if (parts.length !== 1) {
+          pushError('HALT does not take operands.');
+          continue;
+        }
         break;
+      }
 
       case 'LOAD': {
+        if (parts.length !== 3) {
+          pushError('LOAD expects 2 operands: LOAD Rd, [addr].');
+          continue;
+        }
         const rd = parseRegister(parts[1]);
-        const addr = parts[2] ? parseInt(parts[2].replace(/[\[\]]/g, '')) : 0;
-        instr.operands = [rd, addr];
+        if (rd === null) {
+          pushError(`Invalid destination register "${parts[1]}". Valid registers are R0-R7.`);
+          continue;
+        }
+        const parsedAddr = parseMemoryAddress(parts[2]);
+        if (parsedAddr.error) {
+          pushError(parsedAddr.error);
+          continue;
+        }
+        instr.operands = [rd, parsedAddr.value];
         break;
       }
 
       case 'LOADI': {
+        if (parts.length !== 3) {
+          pushError('LOADI expects 2 operands: LOADI Rd, #value.');
+          continue;
+        }
         const rd = parseRegister(parts[1]);
-        const val = parts[2] ? parseInt(parts[2].replace('#', '')) : 0;
-        instr.operands = [rd, val];
+        if (rd === null) {
+          pushError(`Invalid destination register "${parts[1]}". Valid registers are R0-R7.`);
+          continue;
+        }
+        const parsedImmediate = parseImmediate(parts[2]);
+        if (parsedImmediate.error) {
+          pushError(parsedImmediate.error);
+          continue;
+        }
+        instr.operands = [rd, parsedImmediate.value];
         break;
       }
 
       case 'STORE': {
+        if (parts.length !== 3) {
+          pushError('STORE expects 2 operands: STORE Rs, [addr].');
+          continue;
+        }
         const rs = parseRegister(parts[1]);
-        const addr = parts[2] ? parseInt(parts[2].replace(/[\[\]]/g, '')) : 0;
-        instr.operands = [rs, addr];
+        if (rs === null) {
+          pushError(`Invalid source register "${parts[1]}". Valid registers are R0-R7.`);
+          continue;
+        }
+        const parsedAddr = parseMemoryAddress(parts[2]);
+        if (parsedAddr.error) {
+          pushError(parsedAddr.error);
+          continue;
+        }
+        instr.operands = [rs, parsedAddr.value];
         break;
       }
 
@@ -180,21 +300,45 @@ export function parseProgram(text) {
       case 'AND':
       case 'OR':
       case 'CMP': {
+        if (parts.length !== 3) {
+          pushError(`${mnemonic} expects 2 operands: ${mnemonic} Rd, Rs.`);
+          continue;
+        }
         const rd = parseRegister(parts[1]);
         const rs = parseRegister(parts[2]);
+        if (rd === null || rs === null) {
+          pushError(`Invalid register in "${instructionCode}". Valid registers are R0-R7.`);
+          continue;
+        }
         instr.operands = [rd, rs];
         break;
       }
 
       case 'JMP': {
-        let addr = labels[parts[1]] !== undefined ? labels[parts[1]] : parseInt(parts[1]);
-        instr.operands = [addr];
+        if (parts.length !== 2) {
+          pushError('JMP expects 1 operand: JMP addr_or_label.');
+          continue;
+        }
+        const parsedTarget = parseJumpTarget(parts[1], labels, instrIndex);
+        if (parsedTarget.error) {
+          pushError(parsedTarget.error);
+          continue;
+        }
+        instr.operands = [parsedTarget.value];
         break;
       }
 
       case 'JZ': {
-        let addr = labels[parts[1]] !== undefined ? labels[parts[1]] : parseInt(parts[1]);
-        instr.operands = [addr];
+        if (parts.length !== 2) {
+          pushError('JZ expects 1 operand: JZ addr_or_label.');
+          continue;
+        }
+        const parsedTarget = parseJumpTarget(parts[1], labels, instrIndex);
+        if (parsedTarget.error) {
+          pushError(parsedTarget.error);
+          continue;
+        }
+        instr.operands = [parsedTarget.value];
         break;
       }
 

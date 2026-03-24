@@ -16,8 +16,7 @@ export default function CpuSimulator() {
     const [instructions, setInstructions] = useState([]);
     const [isRunning, setIsRunning] = useState(false);
     const [speedIdx, setSpeedIdx] = useState(1);
-    const [subStepIdx, setSubStepIdx] = useState(0);
-    const [subSteps, setSubSteps] = useState([]);
+    const [parseErrors, setParseErrors] = useState([]);
     const [loaded, setLoaded] = useState(false);
     const intervalRef = useRef(null);
     const stateRef = useRef(cpuState);
@@ -28,21 +27,22 @@ export default function CpuSimulator() {
 
     const handleLoad = useCallback(() => {
         const parsed = parseProgram(code);
-        setInstructions(parsed);
+        const errors = parsed.filter((instr) => instr.error);
+        setParseErrors(errors);
+        setInstructions(errors.length > 0 ? [] : parsed);
         setCpuState(createCPUState());
-        setSubSteps([]);
-        setSubStepIdx(0);
         setIsRunning(false);
-        setLoaded(true);
-        if (intervalRef.current) clearInterval(intervalRef.current);
+        setLoaded(errors.length === 0 && parsed.length > 0);
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
     }, [code]);
 
     const stepForward = useCallback(() => {
-        if (stateRef.current.halted) return;
+        if (stateRef.current.halted || instructions.length === 0) return;
         const steps = executeStep(stateRef.current, instructions);
         if (steps.length > 0) {
-            setSubSteps(steps);
-            setSubStepIdx(0);
             const finalState = steps[steps.length - 1];
             setCpuState(finalState);
             stateRef.current = finalState;
@@ -50,29 +50,25 @@ export default function CpuSimulator() {
     }, [instructions]);
 
     const handlePlay = useCallback(() => {
-        if (stateRef.current.halted) return;
+        if (stateRef.current.halted || instructions.length === 0) return;
         setIsRunning(true);
-        intervalRef.current = setInterval(() => {
-            if (stateRef.current.halted) {
-                clearInterval(intervalRef.current);
-                setIsRunning(false);
-                return;
-            }
-            stepForward();
-        }, SPEED_OPTIONS[speedIdx].ms);
-    }, [speedIdx, stepForward]);
+    }, [instructions.length]);
 
     const handlePause = useCallback(() => {
         setIsRunning(false);
-        if (intervalRef.current) clearInterval(intervalRef.current);
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
     }, []);
 
     const handleReset = useCallback(() => {
         setIsRunning(false);
-        if (intervalRef.current) clearInterval(intervalRef.current);
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
         setCpuState(createCPUState());
-        setSubSteps([]);
-        setSubStepIdx(0);
     }, []);
 
     const handleSampleChange = (e) => {
@@ -81,14 +77,43 @@ export default function CpuSimulator() {
             setCode(SAMPLE_PROGRAMS[name]);
             setLoaded(false);
             setIsRunning(false);
-            if (intervalRef.current) clearInterval(intervalRef.current);
+            setParseErrors([]);
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
             setCpuState(createCPUState());
         }
     };
 
     useEffect(() => {
+        if (!isRunning) return undefined;
+        intervalRef.current = setInterval(() => {
+            if (stateRef.current.halted) {
+                setIsRunning(false);
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
+                return;
+            }
+            stepForward();
+        }, SPEED_OPTIONS[speedIdx].ms);
+
         return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+        };
+    }, [isRunning, speedIdx, stepForward]);
+
+    useEffect(() => {
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
         };
     }, []);
 
@@ -131,7 +156,11 @@ export default function CpuSimulator() {
                     <textarea
                         className="code-editor"
                         value={code}
-                        onChange={(e) => { setCode(e.target.value); setLoaded(false); }}
+                        onChange={(e) => {
+                            setCode(e.target.value);
+                            setLoaded(false);
+                            setParseErrors([]);
+                        }}
                         spellCheck={false}
                         rows={14}
                     />
@@ -140,6 +169,18 @@ export default function CpuSimulator() {
                             ⚡ Load Program
                         </button>
                     </div>
+                    {parseErrors.length > 0 && (
+                        <div className="parse-errors">
+                            {parseErrors.slice(0, 4).map((err, idx) => (
+                                <div key={`${err.raw}-${idx}`} className="parse-error">
+                                    {err.message}
+                                </div>
+                            ))}
+                            {parseErrors.length > 4 && (
+                                <div className="parse-error">+{parseErrors.length - 4} more parsing errors</div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Right Panel - CPU Visualization */}

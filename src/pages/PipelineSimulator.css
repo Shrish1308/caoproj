@@ -138,6 +138,17 @@
     justify-content: center;
 }
 
+.run-error {
+    margin-top: var(--space-sm);
+    font-size: 0.82rem;
+    color: var(--accent-red);
+    text-align: center;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+}
+
 /* Stage Legend */
 .stage-legend {
     display: flex;

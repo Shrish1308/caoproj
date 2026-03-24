@@ -8,3 +8,12 @@
   flex: 1;
   padding-bottom: var(--space-2xl);
 }
+
+.route-loading {
+  min-height: 40vh;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}

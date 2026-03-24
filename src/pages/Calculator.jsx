@@ -6,8 +6,10 @@ import {
 import { executionTime, mips, speedup, totalClockCycles, formatTime, formatNumber, amdahlSpeedup } from '../utils/calculations';
 import './Calculator.css';
 
+const makeConfigId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 const defaultConfig = () => ({
-    id: Date.now(),
+    id: makeConfigId(),
     name: '',
     clockRate: 2.0,
     cpi: 1.5,
@@ -43,12 +45,14 @@ export default function Calculator() {
     };
 
     const results = useMemo(() => {
-        return configs.map(c => {
+        return configs.map((c, idx) => {
+            const fallbackName = `Processor ${String.fromCharCode(65 + idx)}`;
             const execTime = executionTime(c.clockRate, c.cpi, c.instructionCount);
             const mipsVal = mips(c.clockRate, c.cpi);
             const cycles = totalClockCycles(c.cpi, c.instructionCount);
             return {
                 ...c,
+                name: c.name.trim() || fallbackName,
                 executionTime: execTime,
                 mips: mipsVal,
                 totalCycles: cycles,
@@ -182,7 +186,7 @@ export default function Calculator() {
                                             max="12"
                                             step="1"
                                             value={config.instructionCountExp}
-                                            onChange={(e) => updateConfig(config.id, 'instructionCountExp', parseInt(e.target.value))}
+                                            onChange={(e) => updateConfig(config.id, 'instructionCountExp', parseInt(e.target.value, 10))}
                                             className="styled-slider emerald-slider"
                                         />
                                         <span className="slider-value mono">10<sup>{config.instructionCountExp}</sup></span>
@@ -310,7 +314,7 @@ export default function Calculator() {
                             max="100"
                             step="1"
                             value={amdahlSpeedupVal}
-                            onChange={(e) => setAmdahlSpeedupVal(parseInt(e.target.value))}
+                            onChange={(e) => setAmdahlSpeedupVal(parseInt(e.target.value, 10))}
                             className="styled-slider purple-slider"
                         />
                     </div>

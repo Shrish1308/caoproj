@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import './Footer.css';
 
 export default function Footer() {
@@ -11,20 +12,20 @@ export default function Footer() {
                 <div className="footer-links">
                     <div className="footer-col">
                         <h4>Simulators</h4>
-                        <a href="/cpu-simulator">CPU Architecture</a>
-                        <a href="/risc-cisc">RISC vs CISC</a>
-                        <a href="/calculator">Performance Calculator</a>
+                        <Link to="/cpu-simulator">CPU Architecture</Link>
+                        <Link to="/risc-cisc">RISC vs CISC</Link>
+                        <Link to="/calculator">Performance Calculator</Link>
                     </div>
                     <div className="footer-col">
                         <h4>Concepts</h4>
-                        <a href="/cpu-simulator">Fetch-Decode-Execute</a>
-                        <a href="/risc-cisc">Instruction Set Comparison</a>
-                        <a href="/calculator">Amdahl's Law</a>
+                        <Link to="/cpu-simulator">Fetch-Decode-Execute</Link>
+                        <Link to="/risc-cisc">Instruction Set Comparison</Link>
+                        <Link to="/calculator">Amdahl&apos;s Law</Link>
                     </div>
                 </div>
             </div>
             <div className="footer-bottom">
-                <p>&copy; 2026 CPUSim — Built for Computer Architecture Education</p>
+                <p>&copy; 2026 CPUSim - Built for Computer Architecture Education</p>
             </div>
         </footer>
     );
